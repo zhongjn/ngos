@@ -35,11 +35,11 @@ impl<T> InitCell<T> {
         }
     }
 
-    pub unsafe fn get_mut(&self) -> &mut T {
-        let internal = &mut *self.internal.get();
-        assert!(internal.is_some());
-        internal.as_mut().unwrap()
-    }
+//    pub unsafe fn get_mut(&self) -> &mut T {
+//        let internal = &mut *self.internal.get();
+//        assert!(internal.is_some());
+//        internal.as_mut().unwrap()
+//    }
 }
 
 impl<T> Deref for InitCell<T> {

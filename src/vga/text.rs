@@ -5,7 +5,6 @@ const VGA_ADDR: *mut u8 = 0xb8000 as *mut u8;
 use lazy_static::*;
 use spin::Mutex;
 use core::fmt::{Arguments, Error, Write};
-use core::cell::{Cell, RefCell};
 
 lazy_static! {
     pub static ref TEXT_WRITTER: Mutex<TextWriter> = Mutex::new(TextWriter::default());

@@ -1,6 +1,3 @@
-use crate::*;
-use core::ops::Range;
-
 const WORD_SIZE: u64 = 32;
 
 const fn word_count(length: u64) -> u64 {
@@ -14,6 +11,10 @@ pub struct BitSet<const LENGTH: u64> {
 impl<const LENGTH: u64> BitSet<{LENGTH}> {
     pub fn new() -> Self {
         unsafe { core::mem::zeroed() }
+    }
+
+    pub fn length(&self) -> u64 {
+        LENGTH
     }
 
     pub fn get(&self, idx: u64) -> bool {
@@ -36,6 +37,16 @@ impl<const LENGTH: u64> BitSet<{LENGTH}> {
         for idx in idx_from..idx_to {
             self.set(idx, value);
         }
+    }
+
+    pub fn find_first(&self, idx_from: u64, idx_to: u64, value: bool) -> Option<u64> {
+        // TODO: more efficient impl
+        for idx in idx_from..idx_to {
+            if self.get(idx) == value {
+                return Some(idx);
+            }
+        }
+        None
     }
 }
 

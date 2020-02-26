@@ -1,4 +1,4 @@
-use bootloader::bootinfo::{FrameRange, MemoryMap, MemoryRegion, MemoryRegionType};
+use bootloader::bootinfo::{FrameRange, MemoryMap, MemoryRegionType};
 use heapless::consts::U16;
 use heapless::Vec;
 use x86_64::PhysAddr;
@@ -7,10 +7,9 @@ use x86_64::structures::paging::Page;
 use crate::util::bitset::BitSet;
 
 use super::*;
-use x86_64::structures::paging::page_table::FrameError::FrameNotPresent;
-use core::cell::RefCell;
-use core::pin::Pin;
-use core::marker::PhantomData;
+use x86_64::structures::paging::page::PageRange;
+use core::intrinsics::size_of;
+use core::ops::Div;
 
 const MAX_FRAME_COUNT: u64 = 1 << 26;
 const FRAME_SIZE: u64 = 1 << 12;
@@ -36,11 +35,11 @@ impl FrameNumber {
     }
 
     pub fn from_addr(addr: PhysAddr) -> Self {
-        FrameNumber(addr.as_u64() << 12)
+        FrameNumber(addr.as_u64() >> 12)
     }
 
     pub fn addr(self) -> PhysAddr {
-        PhysAddr::new(self.0 >> 12)
+        PhysAddr::new(self.0 << 12)
     }
 
     pub fn from_frame(frame: PhysFrame<Size4KiB>) -> Self {
@@ -54,31 +53,38 @@ impl FrameNumber {
 
 type FrameRangeVec = Vec<FrameRange, U16>;
 
-struct Buddy<'a> {
-    phys_addr_trans: &'a PhysAddrTranslator,
+struct BuddyStorage {
+    bitset: BitSet<{ MAX_FRAME_COUNT }>
+}
+
+struct Buddy {
     free_head: FrameNumber,
-    bitset: &'static BitSet<{ MAX_FRAME_COUNT }>,
+    storage: &'static mut BuddyStorage,
+    // bitset: &'static BitSet<{ MAX_FRAME_COUNT }>,
 }
 
 
-impl Buddy<'_> {
-    const BUDDY_FRAMES: u64 = 16;
+impl Buddy {
+    fn new(mgr: &mut FrameManager, page_table: &mut OffsetPageTable) -> Buddy {
+        let pages = num::integer::div_ceil(unsafe { size_of::<BuddyStorage>() as u64 }, FRAME_SIZE);
+        let page_range = ADDR_SPACE_MANAGER.get().lock_int().kernel_alloc(pages);
 
-    fn new<'a>(mgr: &mut FrameManager<'a>, page_table: &mut OffsetPageTable) -> Buddy<'a> {
-        for i in 0..Self::BUDDY_FRAMES {
+        for i in 0..pages {
             let frame = mgr.alloc().expect("out of frames for buddy");
-            page_table.map_to(Page::containing_address(VirtAddr::new(0)),
+            page_table.map_to(page_range.start + i,
                               frame,
-                              PageTableFlags::PRESENT,
+                              PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
                               &mut PagingFrameAllocator::new(mgr))
                 .expect("unexpected map error")
                 .flush();
         }
 
+        let storage_ptr: *mut BuddyStorage = page_range.start.start_address().as_mut_ptr();
+        unsafe { *storage_ptr = BuddyStorage { bitset: Default::default() } };
+
         let mut buddy = Buddy {
-            phys_addr_trans: mgr.phys_addr_trans,
             free_head: FrameNumber::none(),
-            bitset: unsafe { core::mem::zeroed() },
+            storage: unsafe { &mut *storage_ptr },
         };
 
         buddy.setup_free_links(&mgr.usable_range);
@@ -94,7 +100,7 @@ impl Buddy<'_> {
             .flat_map(|range| range.start_frame_number..range.end_frame_number)
             .rev() {
             let phys_addr = FrameNumber::new(idx).addr();
-            let ptr_idx_ptr: *mut u64 = self.phys_addr_trans.translate(phys_addr).as_mut_ptr();
+            let ptr_idx_ptr: *mut u64 = PHYS_ADDR_TRANSLATOR.get().translate(phys_addr).as_mut_ptr();
             unsafe { *ptr_idx_ptr = idx_next; }
             idx_next = idx;
         }
@@ -107,11 +113,11 @@ impl Buddy<'_> {
             None
         } else {
             let idx = self.free_head.as_u64();
-            //assert!(self.bitset.get(idx));
-            //self.bitset.set(idx, false);
+            assert!(self.storage.bitset.get(idx));
+            self.storage.bitset.set(idx, false);
 
             let frame = self.free_head.frame();
-            let next_idx_ptr: *mut u64 = self.phys_addr_trans.translate(frame.start_address()).as_mut_ptr();
+            let next_idx_ptr: *mut u64 = PHYS_ADDR_TRANSLATOR.get().translate(frame.start_address()).as_mut_ptr();
             unsafe {
                 self.free_head = FrameNumber::new(*next_idx_ptr);
                 Some(FrameNumber::from_frame(frame))
@@ -123,10 +129,10 @@ impl Buddy<'_> {
         assert!(two_power_frames == 0, "not implemented yet");
 
         let idx = start.as_u64();
-        //assert!(!self.bitset.get(idx));
-        //self.bitset.set(idx, true);
+        assert!(!self.storage.bitset.get(idx));
+        self.storage.bitset.set(idx, true);
 
-        let next_idx_ptr: *mut u64 = self.phys_addr_trans.translate(start.addr()).as_mut_ptr();
+        let next_idx_ptr: *mut u64 = PHYS_ADDR_TRANSLATOR.get().translate(start.addr()).as_mut_ptr();
         unsafe {
             *next_idx_ptr = self.free_head.as_u64();
         }
@@ -135,11 +141,9 @@ impl Buddy<'_> {
     }
 }
 
-pub struct FrameManager<'a> {
-    phys_addr_trans: &'a PhysAddrTranslator,
+pub struct FrameManager {
     usable_range: FrameRangeVec,
-    buddy: Option<Buddy<'a>>,
-    // bitset: Option<&'static BitSet<{ MAX_FRAME_COUNT }>>, // true if available
+    buddy: Option<Buddy>,
 }
 
 trait FrameRangeExt {
@@ -152,14 +156,11 @@ impl FrameRangeExt for FrameRange {
     }
 }
 
-impl FrameManager<'_> {
-    pub fn new<'a>(memory_map: &MemoryMap, phys_addr_trans: &'a PhysAddrTranslator, page_table: &mut OffsetPageTable) -> FrameManager<'a> {
-        //panic!("boom");
+impl FrameManager {
+    pub fn new(memory_map: &MemoryMap, page_table: &mut OffsetPageTable) -> FrameManager {
         let mut mgr = FrameManager {
-            // free_head: FrameNumber::none(),
             buddy: None,
             usable_range: Default::default(),
-            phys_addr_trans,
         };
 
         for range in memory_map.iter()
@@ -173,16 +174,6 @@ impl FrameManager<'_> {
         mgr
     }
 
-//    fn setup_buddy(&mut self) {
-//
-//    }
-
-    fn alloc_for_bitset(&mut self) {
-        let demand_frames = MAX_FRAME_COUNT / 8 / FRAME_SIZE;
-    }
-
-    fn setup_free_bitset(&mut self) {}
-
     fn frame_in_usable_range(&self, frame: PhysFrame) -> bool {
         let idx = FrameNumber::from_frame(frame).as_u64();
         for range in self.usable_range.iter() {
@@ -194,6 +185,7 @@ impl FrameManager<'_> {
     pub fn alloc(&mut self) -> Option<UnusedPhysFrame<Size4KiB>> {
         if let Some(buddy) = &mut self.buddy {
             unimplemented!()
+            buddy.alloc();
         } else {
             while let Some(range) = self.usable_range.last_mut() {
                 if range.count() > 0 {
@@ -219,17 +211,17 @@ impl FrameManager<'_> {
     }
 }
 
-pub struct PagingFrameAllocator<'u, 'v: 'u> {
-    manager: &'u mut FrameManager<'v>,
+pub struct PagingFrameAllocator<'u> {
+    manager: &'u mut FrameManager,
 }
 
-impl PagingFrameAllocator<'_, '_> {
-    pub fn new<'u, 'v: 'u>(manager: &'u mut FrameManager<'v>) -> PagingFrameAllocator<'u, 'v> {
+impl PagingFrameAllocator<'_> {
+    pub fn new(manager: &mut FrameManager) -> PagingFrameAllocator {
         PagingFrameAllocator { manager }
     }
 }
 
-unsafe impl FrameAllocator<Size4KiB> for PagingFrameAllocator<'_, '_> {
+unsafe impl FrameAllocator<Size4KiB> for PagingFrameAllocator<'_> {
     fn allocate_frame(&mut self) -> Option<UnusedPhysFrame<Size4KiB>> {
         self.manager.alloc()
     }

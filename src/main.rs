@@ -1,26 +1,35 @@
 #![no_std]
 #![no_main]
-#![feature(asm)]
-#![feature(custom_test_frameworks)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
+#![feature(custom_test_frameworks)]
+#![feature(asm)]
 #![feature(abi_x86_interrupt)]
 #![feature(const_fn)]
 #![feature(const_generics)]
 #![feature(core_intrinsics)]
 
+#[macro_use]
 mod vga;
+
+#[allow(dead_code)]
+#[macro_use]
+mod util;
+
 mod serial;
 mod kernel;
-mod util;
+
 
 use vga::*;
 use core::panic::PanicInfo;
 use bootloader::BootInfo;
+use crate::util::call_stack::CallStackInfo;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("KERNEL PANIC! {}", info);
+    CallStackInfo::print_all();
+    TEXT_WRITTER.lock().flush();
     loop {}
 }
 

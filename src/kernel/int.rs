@@ -4,7 +4,6 @@ use lazy_static::*;
 use x86_64::structures::idt::*;
 use pic8259_simple::ChainedPics;
 use spin;
-use pc_keyboard::DecodedKey;
 use crate::kernel::time::timer_event_handler;
 
 lazy_static! { static ref IDT: InterruptDescriptorTable = make_idt_static(); }
@@ -58,7 +57,7 @@ extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: &mut InterruptSta
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: &mut InterruptStackFrame) {
-    use pc_keyboard::{Keyboard, ScancodeSet1, DecodedKey, layouts};
+    use pc_keyboard::{Keyboard, ScancodeSet1, layouts};
     use spin::Mutex;
     use x86_64::instructions::port::Port;
 
@@ -76,9 +75,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: &mut Interrupt
         let mut keyboard = KEYBOARD.lock();
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
             if let Some(key) = keyboard.process_keyevent(key_event) {
-                unsafe {
-                    println!("key pressed {:?}", key);
-                }
+                println!("key pressed {:?}", key);
             }
         }
     }
