@@ -48,7 +48,7 @@ impl VGATextAdapter {
         for row in 0..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
                 let offset: isize = (row * BUFFER_WIDTH + col) as isize * 2;
-                let blink_flag: u8 = ((row, col) != self.underline) as u8;
+                // let blink_flag: u8 = ((row, col) != self.underline) as u8;
                 unsafe {
                     *VGA_ADDR.offset(offset) = self.data[row][col];
                     *VGA_ADDR.offset(offset + 1) = 0xf;

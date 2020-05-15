@@ -1,9 +1,10 @@
-use spin::{Mutex, MutexGuard};
 use core::ops::{Deref, DerefMut};
+use spin::{Mutex, MutexGuard};
 
 #[derive(Debug)]
 pub struct MutexGuardInt<'a, T> {
-    guard: MutexGuard<'a, T>
+    interrupt_enabled_before: bool,
+    guard: MutexGuard<'a, T>,
 }
 
 pub trait MutexIntExt<T> {
@@ -12,14 +13,22 @@ pub trait MutexIntExt<T> {
 
 impl<T> MutexIntExt<T> for Mutex<T> {
     fn lock_int(&self) -> MutexGuardInt<T> {
-        x86_64::instructions::interrupts::disable();
-        MutexGuardInt { guard: self.lock() }
+        let int_en = x86_64::instructions::interrupts::are_enabled();
+        if int_en {
+            x86_64::instructions::interrupts::disable();
+        }
+        MutexGuardInt {
+            interrupt_enabled_before: int_en,
+            guard: self.lock(),
+        }
     }
 }
 
 impl<T> Drop for MutexGuardInt<'_, T> {
     fn drop(&mut self) {
-        x86_64::instructions::interrupts::enable();
+        if self.interrupt_enabled_before {
+            x86_64::instructions::interrupts::enable();
+        }
     }
 }
 

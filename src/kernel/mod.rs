@@ -2,15 +2,13 @@ mod int;
 mod gdt;
 mod time;
 mod memory;
-#[allow(dead_code)]
 mod misc;
 
-use time::get_real_time;
-pub use time::subscribe_timer;
+// use time::get_real_time;
 use bootloader::BootInfo;
+pub use time::subscribe_timer;
 
 pub fn init(boot_info: &'static BootInfo) {
-    //    let _info = CallStackInfo::new("kernel::init");
     call_stack!();
 
     println!("not crashed");
@@ -18,11 +16,6 @@ pub fn init(boot_info: &'static BootInfo) {
     int::init();
     time::init();
     memory::init(boot_info.physical_memory_offset, &boot_info.memory_map);
-
-    //test.borrow();
-    //unsafe { *(0xdeadbeef as *mut u8) = 1; }
-    //println!("not crashed");
-
 }
 
 pub fn start() {

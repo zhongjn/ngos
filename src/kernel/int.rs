@@ -1,10 +1,9 @@
-use crate::*;
-use super::*;
 use lazy_static::*;
 use x86_64::structures::idt::*;
 use pic8259_simple::ChainedPics;
 use spin;
 use crate::kernel::time::timer_event_handler;
+use super::gdt;
 
 lazy_static! { static ref IDT: InterruptDescriptorTable = make_idt_static(); }
 
@@ -49,14 +48,14 @@ enum InterruptIndex {
     Keyboard,
 }
 
-extern "x86-interrupt" fn timer_interrupt_handler(stack_frame: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
     unsafe {
         PICS.lock().notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
         timer_event_handler();
     }
 }
 
-extern "x86-interrupt" fn keyboard_interrupt_handler(stack_frame: &mut InterruptStackFrame) {
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
     use pc_keyboard::{Keyboard, ScancodeSet1, layouts};
     use spin::Mutex;
     use x86_64::instructions::port::Port;

@@ -1,16 +1,13 @@
-use bootloader::bootinfo::{MemoryMap};
+use bootloader::bootinfo::MemoryMap;
 use spin::Mutex;
-use x86_64::{PhysAddr, VirtAddr};
-use x86_64::registers::control::*;
-use x86_64::structures::paging::*;
+use x86_64::{VirtAddr, registers::control::*, structures::paging::*};
 
 use frame::*;
 use phys_addr_trans::*;
 use addr_space::*;
 
-use crate::util::init_cell::InitCell;
-use crate::util::mutex_int::MutexIntExt;
-use core::ops::{DerefMut};
+use crate::util::{init_cell::InitCell, mutex_int::MutexIntExt};
+use core::ops::DerefMut;
 
 mod frame;
 mod phys_addr_trans;
@@ -30,17 +27,15 @@ fn current_l4_page_table() -> &'static mut PageTable {
     }
 }
 
-fn test_create_map() {
-    use x86_64::structures::paging::PageTableFlags as Flags;
-    let page = Page::<Size4KiB>::containing_address(VirtAddr::new(0xdeadbeef));
-    let frame = unsafe {
-        UnusedPhysFrame::new(
-            PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xb8000)))
-    };
-    let flags = Flags::PRESENT | Flags::WRITABLE;
-
-}
-
+// fn test_create_map() {
+//     use x86_64::structures::paging::PageTableFlags as Flags;
+//     let page = Page::<Size4KiB>::containing_address(VirtAddr::new(0xdeadbeef));
+//     let frame = unsafe {
+//         UnusedPhysFrame::new(
+//             PhysFrame::<Size4KiB>::containing_address(PhysAddr::new(0xb8000)))
+//     };
+//     let flags = Flags::PRESENT | Flags::WRITABLE;
+// }
 
 pub fn init(physical_memory_offset: u64, memory_map: &'static MemoryMap) {
     //let _info = CallStackInfo::new("kernel::memory::init");
@@ -71,12 +66,12 @@ pub fn init(physical_memory_offset: u64, memory_map: &'static MemoryMap) {
         memory_map,
         OFFSET_PAGE_TABLE.lock_int().deref_mut())));
 
-    for i in 0..10 {
-        let f = FRAME_MANAGER.get().lock().alloc();
+    for _i in 0..10 {
+        let f = FRAME_MANAGER.get().lock().alloc(0);
         println!("{:?}", f);
     }
 
-    panic!("done");
+    // panic!("done");
     let pat = PHYS_ADDR_TRANSLATOR.get();
     let ptr: *const _ = &pat;
     let addr = OFFSET_PAGE_TABLE.lock_int().translate_addr(VirtAddr::new(ptr as u64)).unwrap();

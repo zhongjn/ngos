@@ -1,7 +1,7 @@
 use heapless::Vec;
 use heapless::consts::U128;
 use core::cell::UnsafeCell;
-use super::sync_wrapper::SyncWrapper;
+use super::constant::Constant;
 use lazy_static::*;
 
 #[macro_export]
@@ -24,7 +24,7 @@ macro_rules! function {
 
 
 lazy_static! {
-    static ref STACK: SyncWrapper<UnsafeCell<Vec<&'static str, U128>>>
+    static ref STACK: Constant<UnsafeCell<Vec<&'static str, U128>>>
         = Default::default();
 }
 

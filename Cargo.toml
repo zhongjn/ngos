@@ -18,9 +18,9 @@ panic = "abort"
 panic = "abort"
 
 [dependencies]
-bootloader = { version = "0.8.0", features = ["map_physical_memory"]}
+bootloader = { version = "0.8.9", features = ["map_physical_memory"]}
 spin = "0.5.2"
-x86_64 = "0.8.1"
+x86_64 = "0.10.3"
 uart_16550 = "0.2.0"
 pic8259_simple = "0.1.1"
 pc-keyboard = "0.3.1"

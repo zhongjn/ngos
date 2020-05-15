@@ -1,45 +1,55 @@
-use core::ops::Deref;
-use core::cell::UnsafeCell;
+use core::{cell::UnsafeCell, mem::MaybeUninit, ops::Deref};
 
-struct InitInternal<T> {
-    has_value: bool,
-    value: T,
+struct InitCellInner<T> {
+    init: bool,
+    value: MaybeUninit<T>,
 }
 
 pub struct InitCell<T> {
-    internal: UnsafeCell<Option<T>>
+    inner: UnsafeCell<InitCellInner<T>>,
 }
 
-unsafe impl<T> Sync for InitCell<T> {}
+unsafe impl<T: Sync> Sync for InitCell<T> {}
 
 impl<T> InitCell<T> {
     pub const fn new() -> Self {
-        InitCell {
-            internal: UnsafeCell::new(None)
+        Self {
+            inner: UnsafeCell::new(InitCellInner {
+                init: false,
+                value: MaybeUninit::uninit(),
+            }),
         }
     }
 
     pub fn init(&'static self, value: T) {
         unsafe {
-            let internal: &mut Option<T> = &mut *self.internal.get();
-            assert!(internal.is_none());
-            internal.replace(value);
+            let inner = &mut *self.inner.get();
+            assert!(!inner.init);
+            *inner.value.as_mut_ptr() = value;
+            inner.init = true;
         }
+    }
+
+    pub unsafe fn init_in_place(&'static self, f: impl FnOnce(*mut T)) {
+        let inner = &mut *self.inner.get();
+        assert!(!inner.init);
+        f(inner.value.as_mut_ptr());
+        inner.init = true;
     }
 
     pub fn get(&self) -> &T {
         unsafe {
-            let internal = &*self.internal.get();
-            assert!(internal.is_some());
-            internal.as_ref().unwrap()
+            let inner = &mut *self.inner.get();
+            assert!(inner.init);
+            &*inner.value.as_ptr()
         }
     }
+}
 
-//    pub unsafe fn get_mut(&self) -> &mut T {
-//        let internal = &mut *self.internal.get();
-//        assert!(internal.is_some());
-//        internal.as_mut().unwrap()
-//    }
+impl<T> Default for InitCell<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> Deref for InitCell<T> {

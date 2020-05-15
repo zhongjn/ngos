@@ -6,8 +6,8 @@
 #![feature(asm)]
 #![feature(abi_x86_interrupt)]
 #![feature(const_fn)]
-#![feature(const_generics)]
 #![feature(core_intrinsics)]
+#![feature(llvm_asm)]
 
 #[macro_use]
 mod vga;
@@ -17,6 +17,8 @@ mod vga;
 mod util;
 
 mod serial;
+
+#[allow(dead_code)]
 mod kernel;
 
 
