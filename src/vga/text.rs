@@ -7,7 +7,7 @@ use spin::Mutex;
 use core::fmt::{Arguments, Error, Write};
 
 lazy_static! {
-    pub static ref TEXT_WRITTER: Mutex<TextWriter> = Mutex::new(TextWriter::default());
+    pub static ref TEXT_WRITER: Mutex<TextWriter> = Mutex::new(TextWriter::default());
 }
 
 #[macro_export]
@@ -25,7 +25,7 @@ macro_rules! println {
 pub fn _print(args: Arguments) {
     use x86_64::instructions::interrupts;
     interrupts::without_interrupts(|| {
-        TEXT_WRITTER.lock().write_fmt(args).unwrap();
+        TEXT_WRITER.lock().write_fmt(args).unwrap();
     });
 }
 

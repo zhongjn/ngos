@@ -1,16 +1,18 @@
 use heapless::Vec;
 use heapless::consts::U128;
-use core::cell::UnsafeCell;
+use core::{fmt::Write, cell::UnsafeCell};
 use super::constant::Constant;
 use lazy_static::*;
 
 #[macro_export]
 macro_rules! call_stack {
     () => {
-        let _call = $crate::CallStackInfo::new(function!());
+        let _call = $crate::util::call_stack::CallStackInfo::new($crate::function!());
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
 macro_rules! function {
     () => {{
         fn f() {}
@@ -39,11 +41,13 @@ impl CallStackInfo {
         CallStackInfo { message, in_stack: stack.push(message).is_ok() }
     }
 
-    pub fn print_all() {
-        println!("[CALL STACK]");
+    pub fn print_all(mut writer: impl Write) {
+        writeln!(writer, "[CALL STACK]").expect("print failed");
+        // println!("[CALL STACK]");
         let stack = unsafe { &*STACK.get() };
         for (i, msg) in stack.iter().enumerate().rev() {
-            println!("{}: {}", i, msg);
+            writeln!(writer, "{}: {}", i, msg).expect("print failed");
+            // println!("{}: {}", i, msg);
         }
     }
 }

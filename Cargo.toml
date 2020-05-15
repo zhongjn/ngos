@@ -4,9 +4,17 @@ version = "0.1.0"
 authors = ["zhongjn <2389206378@qq.com>"]
 edition = "2018"
 
+[[test]]
+name = "should_panic"
+test_harness = false
+
+
 [package.metadata.bootimage]
-test-args = ["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"]
+test-args = [
+    "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-serial", "stdio"
+]
 test-success-exit-code = 33
+test-timeout = 300 # (in seconds)
 
 [package.metadata.bootloader]
 kernel-stack-size = 8192

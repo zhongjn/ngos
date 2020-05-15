@@ -13,8 +13,8 @@ mod frame;
 mod phys_addr_trans;
 mod addr_space;
 
-static ADDR_SPACE_MANAGER: InitCell<Mutex<AddrSpaceManager>> = InitCell::new();
 static PHYS_ADDR_TRANSLATOR: InitCell<PhysAddrTranslator> = InitCell::new();
+static ADDR_SPACE_MANAGER: InitCell<Mutex<AddrSpaceManager>> = InitCell::new();
 static OFFSET_PAGE_TABLE: InitCell<Mutex<OffsetPageTable>> = InitCell::new();
 static FRAME_MANAGER: InitCell<Mutex<FrameManager>> = InitCell::new();
 
@@ -39,7 +39,7 @@ fn current_l4_page_table() -> &'static mut PageTable {
 
 pub fn init(physical_memory_offset: u64, memory_map: &'static MemoryMap) {
     //let _info = CallStackInfo::new("kernel::memory::init");
-    call_stack!();
+    crate::call_stack!();
 
     let physical_memory_offset = VirtAddr::new(physical_memory_offset);
     PHYS_ADDR_TRANSLATOR.init(PhysAddrTranslator::new(physical_memory_offset));

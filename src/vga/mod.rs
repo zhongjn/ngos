@@ -4,8 +4,9 @@ mod text;
 pub use text::*;
 
 pub fn init() {
+    crate::call_stack!();
     // vga refresh
     crate::kernel::subscribe_timer(10_000_000, || {
-        TEXT_WRITTER.lock().flush();
+        TEXT_WRITER.lock().flush();
     });
 }

@@ -9,7 +9,7 @@ use bootloader::BootInfo;
 pub use time::subscribe_timer;
 
 pub fn init(boot_info: &'static BootInfo) {
-    call_stack!();
+    crate::call_stack!();
 
     println!("not crashed");
     gdt::init();

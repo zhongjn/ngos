@@ -1,71 +1,52 @@
-#![no_std]
-#![no_main]
-#![test_runner(crate::test_runner)]
-#![reexport_test_harness_main = "test_main"]
-#![feature(custom_test_frameworks)]
-#![feature(asm)]
-#![feature(abi_x86_interrupt)]
-#![feature(const_fn)]
-#![feature(core_intrinsics)]
-#![feature(llvm_asm)]
+// #![no_std]
+// #![no_main]
+// #![feature(custom_test_frameworks)]
+// #![test_runner(ngos::test_runner)]
+// #![reexport_test_harness_main = "test_main"]
 
-#[macro_use]
-mod vga;
+// #[macro_use]
+// extern crate ngos;
 
-#[allow(dead_code)]
-#[macro_use]
-mod util;
-
-mod serial;
-
-#[allow(dead_code)]
-mod kernel;
+// use bootloader::BootInfo;
+// use core::panic::PanicInfo;
 
 
-use vga::*;
-use core::panic::PanicInfo;
-use bootloader::BootInfo;
-use crate::util::call_stack::CallStackInfo;
+// #[cfg(test)]
+// #[panic_handler]
+// fn panic(info: &PanicInfo) -> ! {
+//     ngos::test_panic_handler(info)
+// }
 
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    println!("KERNEL PANIC! {}", info);
-    CallStackInfo::print_all();
-    TEXT_WRITTER.lock().flush();
-    loop {}
-}
+// #[cfg(not(test))]
+// #[panic_handler]
+// fn panic(info: &PanicInfo) -> ! {
+//     use ngos::util::call_stack::CallStackInfo;
+//     println!("KERNEL PANIC! {}", info);
+//     serial_println!("KERNEL PANIC! {}", info);
+//     {
+//         let mut writer = ngos::vga::TEXT_WRITER.lock();
+//         CallStackInfo::print_all(&mut *writer);
+//         writer.flush();
+//     }
+//     {
+//         let mut writer = ngos::serial::SERIAL1.lock();
+//         CallStackInfo::print_all(&mut *writer);
+//     }
 
-//noinspection RsUnresolvedReference
-#[cfg(test)]
-fn test() {
-    test_main();
-}
+//     loop {}
+// }
 
-#[cfg(test)]
-fn test_runner(tests: &[&dyn Fn()]) {
-    println!("running {} tests...", tests.len());
-    for (i, test) in tests.iter().enumerate() {
-        println!("test no.{}", i);
-        test();
-        println!("test no.{} - OK", i);
-    }
-}
+// #[cfg(not(test))]
+// #[no_mangle]
+// pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
+//     ngos::kernel::init(boot_info);
+//     ngos::vga::init();
 
-#[test_case]
-fn trivial_assertion() {
-    println!("trivial assertion... ");
-    assert_eq!(1, 1);
-}
+//     #[cfg(test)]
+//     test_main();
 
-#[no_mangle]
-pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
-    #[cfg(test)] test();
+//     ngos::kernel::start();
 
-    kernel::init(boot_info);
-    vga::init();
-
-    kernel::start();
-
-    print!("terminated");
-    loop {}
-}
+//     print!("terminated");
+//     loop {}
+// }
