@@ -1,3 +1,4 @@
 {
-    "rust-analyzer.checkOnSave.command": "xcheck"
+    "rust-analyzer.checkOnSave.command": "xcheck",
+    "rust-analyzer.checkOnSave.enable": false,
 }

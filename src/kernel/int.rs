@@ -1,11 +1,53 @@
+use super::gdt;
+use crate::{kernel::time::timer_event_handler, util::mutex_int::MutexIntExt};
+use core::sync::atomic::{AtomicBool, Ordering};
 use lazy_static::*;
-use x86_64::structures::idt::*;
 use pic8259_simple::ChainedPics;
 use spin;
-use crate::kernel::time::timer_event_handler;
-use super::gdt;
+use x86_64::structures::idt::*;
 
-lazy_static! { static ref IDT: InterruptDescriptorTable = make_idt_static(); }
+static IS_INTERRUPT_CONTEXT: AtomicBool = AtomicBool::new(false);
+
+pub fn is_interrupt_context() -> bool {
+    IS_INTERRUPT_CONTEXT.load(Ordering::Relaxed)
+}
+
+struct InterruptContextHandle {
+    _private: (),
+}
+
+impl InterruptContextHandle {
+    fn new() -> Self {
+        IS_INTERRUPT_CONTEXT.store(true, Ordering::Relaxed);
+        Self { _private: () }
+    }
+}
+
+impl Drop for InterruptContextHandle {
+    fn drop(&mut self) {
+        IS_INTERRUPT_CONTEXT.store(false, Ordering::Relaxed);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+enum InterruptIndex {
+    Timer = PIC_1_OFFSET,
+    Keyboard,
+}
+
+impl InterruptIndex {
+    fn as_u8(self) -> u8 {
+        self as u8
+    }
+    fn as_usize(self) -> usize {
+        self as usize
+    }
+}
+
+lazy_static! {
+    static ref IDT: InterruptDescriptorTable = make_idt_static();
+}
 
 fn make_idt_static() -> InterruptDescriptorTable {
     let mut idt = InterruptDescriptorTable::new();
@@ -22,18 +64,26 @@ fn make_idt_static() -> InterruptDescriptorTable {
     }
 }
 
-extern "x86-interrupt" fn breakpoint_handler(stack_frame: &mut InterruptStackFrame)
-{
+extern "x86-interrupt" fn breakpoint_handler(stack_frame: &mut InterruptStackFrame) {
+    let _int = InterruptContextHandle::new();
     println!("BREAKPOINT\n{:#?}", stack_frame);
 }
 
-extern "x86-interrupt" fn double_fault_handler(stack_frame: &mut InterruptStackFrame, _error_code: u64) -> !
-{
+extern "x86-interrupt" fn double_fault_handler(
+    stack_frame: &mut InterruptStackFrame,
+    _error_code: u64,
+) -> ! {
+    let _int = InterruptContextHandle::new();
     panic!("DOUBLE FAULT\n{:#?}", stack_frame);
 }
 
-extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut InterruptStackFrame, err: PageFaultErrorCode) {
+extern "x86-interrupt" fn page_fault_handler(
+    stack_frame: &mut InterruptStackFrame,
+    err: PageFaultErrorCode,
+) {
+    let _int = InterruptContextHandle::new();
     use x86_64::registers::control::Cr2;
+    super::memory::do_page_fault(Cr2::read(), stack_frame, err);
 
     println!("EXCEPTION: PAGE FAULT");
     println!("Accessed Address: {:?}", Cr2::read());
@@ -41,22 +91,18 @@ extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut InterruptStackFra
     println!("{:#?}", stack_frame);
 }
 
-#[derive(Debug, Clone, Copy)]
-#[repr(u8)]
-enum InterruptIndex {
-    Timer = PIC_1_OFFSET,
-    Keyboard,
-}
-
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
+    let _int = InterruptContextHandle::new();
     unsafe {
-        PICS.lock().notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
+        PICS.lock_uninterruptible()
+            .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
         timer_event_handler();
     }
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut InterruptStackFrame) {
-    use pc_keyboard::{Keyboard, ScancodeSet1, layouts};
+    let _int = InterruptContextHandle::new();
+    use pc_keyboard::{layouts, Keyboard, ScancodeSet1};
     use spin::Mutex;
     use x86_64::instructions::port::Port;
 
@@ -64,7 +110,8 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut Interrup
         Mutex::new(Keyboard::new(layouts::Us104Key, ScancodeSet1))
     }
     lazy_static! {
-        static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = make_keyboard_static();
+        static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> =
+            make_keyboard_static();
     }
 
     let mut port = Port::new(0x60);
@@ -80,14 +127,9 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: &mut Interrup
     }
 
     unsafe {
-        PICS.lock().notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
+        PICS.lock_uninterruptible()
+            .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
     }
-}
-
-
-impl InterruptIndex {
-    fn as_u8(self) -> u8 { self as u8 }
-    fn as_usize(self) -> usize { self as usize }
 }
 
 const PIC_1_OFFSET: u8 = 32;

@@ -1,11 +1,12 @@
 #![no_std]
 #![no_main]
 
-use ngos::{exit_qemu, serial_print, serial_println, QemuExitCode};
 use core::panic::PanicInfo;
+use ngos::{exit_qemu, serial_print, serial_println, QemuExitCode};
+use bootloader::BootInfo;
 
 #[no_mangle]
-pub extern "C" fn _start() -> ! {
+pub extern "C" fn _start(_boot_info: &'static BootInfo) -> ! {
     should_fail();
     serial_println!("[test did not panic]");
     exit_qemu(QemuExitCode::Failed);

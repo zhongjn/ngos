@@ -6,13 +6,11 @@ edition = "2018"
 
 [[test]]
 name = "should_panic"
-test_harness = false
-
+harness = false
 
 [package.metadata.bootimage]
-test-args = [
-    "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-serial", "stdio"
-]
+run-args = ["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-serial", "stdio"]
+test-args = ["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-serial", "stdio"]
 test-success-exit-code = 33
 test-timeout = 300 # (in seconds)
 
@@ -33,6 +31,8 @@ uart_16550 = "0.2.0"
 pic8259_simple = "0.1.1"
 pc-keyboard = "0.3.1"
 heapless = "0.5.2"
+log = "0.4.8"
+linked_list_allocator = "0.8.4"
 
 [dependencies.num]
 version = "0.2"

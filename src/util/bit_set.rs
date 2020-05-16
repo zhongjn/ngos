@@ -22,9 +22,23 @@ impl BitSet<'_> {
         }
     }
 
-    pub fn set_all(&mut self, range: Range<u64>, value: bool) {
-        // TODO efficient impl
-        for idx in range {
+    pub fn set_all(&mut self, value: bool) {
+        self.set_range(0..self.n_bits, value);
+    }
+
+    pub fn set_range(&mut self, range: Range<u64>, value: bool) {
+        assert!(range.end <= self.n_bits);
+        let blk_start = num::integer::div_ceil(range.start, 8);
+        let blk_end = num::integer::div_floor(range.end, 8);
+        unsafe {
+            core::ptr::write_bytes(
+                self.data.as_mut_ptr().offset(blk_start as isize),
+                if value { !0 } else { 0 },
+                (blk_end - blk_start) as usize,
+            );
+        }
+
+        for idx in Iterator::chain(range.start..blk_start * 8, blk_end * 8..range.end) {
             self.set(idx, value);
         }
     }
@@ -33,6 +47,53 @@ impl BitSet<'_> {
         assert!(idx < self.n_bits);
         let word_mask = 1 << (idx % 8) as u8;
         unsafe { (*self.data.get_unchecked(idx as usize / 8) & word_mask) != 0 }
+    }
+}
+
+#[test_case]
+fn bitset_simple() {
+    crate::serial_println!("bitset simple");
+    let mut arr = [0 as u8; 128];
+    let mut bitset = BitSet::new(200, &mut arr);
+    bitset.set(12, true);
+    bitset.set(29, true);
+    assert!(bitset.get(12));
+    assert!(!bitset.get(11));
+    assert!(!bitset.get(13));
+    assert!(bitset.get(29));
+    assert!(!bitset.get(28));
+    assert!(!bitset.get(30));
+}
+
+#[test_case]
+fn bitset_range() {
+    crate::serial_println!("bitset range");
+    let mut arr = [0 as u8; 128];
+    let mut bitset = BitSet::new(200, &mut arr);
+
+    bitset.set_all(true);
+    for i in 0..bitset.n_bits {
+        assert_eq!(bitset.get(i), true);
+    }
+
+    bitset.set_all(false);
+    for i in 0..bitset.n_bits {
+        assert_eq!(bitset.get(i), false);
+    }
+
+    bitset.set_range(0..34, true);
+    bitset.set_range(78..123, true);
+    for i in 0..34 {
+        assert_eq!(bitset.get(i), true);
+    }
+    for i in 34..78 {
+        assert_eq!(bitset.get(i), false);
+    }
+    for i in 78..123 {
+        assert_eq!(bitset.get(i), true);
+    }
+    for i in 123..bitset.n_bits {
+        assert_eq!(bitset.get(i), false);
     }
 }
 

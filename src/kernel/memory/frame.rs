@@ -1,5 +1,5 @@
 use super::{ADDR_SPACE_MANAGER, PHYS_ADDR_TRANSLATOR};
-use crate::util::{bit_set::BitSet, default_in_place::DefaultInPlace, mutex_int::MutexIntExt};
+use crate::util::{bit_set::BitSet, mutex_int::MutexIntExt};
 use bootloader::bootinfo::{FrameRange, MemoryMap, MemoryRegionType};
 use core::intrinsics::size_of;
 use heapless::consts::U16;
@@ -55,17 +55,31 @@ impl FrameNumber {
 type FrameRangeVec = Vec<FrameRange, U16>;
 
 struct BuddyStorage {
-    order0_free: [u8; (MAX_FRAME_COUNT_USIZE + 7) / 8],
+    frames: u64,
+    // order0_free: [u8; (MAX_FRAME_COUNT_USIZE + 7) / 8],
+    free: [u8],
 }
 
-impl DefaultInPlace for BuddyStorage {
-    unsafe fn default_in_place(s: *mut Self) {
-        let arr = &mut (*s).order0_free;
-        for byte in arr.iter_mut() {
-            *byte = !0;
-        }
+impl BuddyStorage {
+    fn size(frames: u64) -> u64 {
+        size_of::<u64>() as u64 + frames / 8
+    }
+
+    fn free_bitmap(&mut self, order: u8) -> BitSet<'_> {
+        assert!(order == 0, "not implemented");
+        BitSet::new(self.frames, &mut self.free)
     }
 }
+
+// impl DefaultInPlace for BuddyStorage {
+//     unsafe fn default_in_place(s: *mut Self) {
+//         let size = BuddyStorage::size()
+//         let arr = &mut (*s).order0_free;
+//         for byte in arr.iter_mut() {
+//             *byte = !0;
+//         }
+//     }
+// }
 
 struct Buddy {
     free_head: FrameNumber,
@@ -74,8 +88,13 @@ struct Buddy {
 
 impl Buddy {
     fn new(mgr: &mut FrameManager, page_table: &mut OffsetPageTable) -> Buddy {
-        let pages = num::integer::div_ceil(size_of::<BuddyStorage>() as u64, FRAME_SIZE);
-        let page_range = ADDR_SPACE_MANAGER.get().lock_int().kernel_alloc(pages);
+        log::trace!("setting up buddy");
+        let frames = mgr.usable_range.last().unwrap().end_frame_number;
+        let storage_size = BuddyStorage::size(frames);
+
+        let pages = num::integer::div_ceil(storage_size, FRAME_SIZE);
+        let page_range = ADDR_SPACE_MANAGER.get().lock_uninterruptible().kernel_alloc(pages);
+        log::trace!("buddy storage took {} pages", pages);
 
         for i in 0..pages {
             let frame = mgr.alloc(0).expect("out of frames for buddy").into_frame();
@@ -92,17 +111,29 @@ impl Buddy {
             }
         }
 
-        let storage_ptr: *mut BuddyStorage = page_range.start.start_address().as_mut_ptr();
-        unsafe {
-            DefaultInPlace::default_in_place(storage_ptr);
+        let storage = unsafe {
+            let storage_ptr: *mut () = page_range.start.start_address().as_mut_ptr();
+            let fat_ptr = core::slice::from_raw_parts_mut(storage_ptr, storage_size as usize)
+                as *mut [()] as *mut BuddyStorage;
+            &mut *fat_ptr
         };
+        storage.frames = frames;
+        storage.free_bitmap(0).set_all(false);
+
+        // set usable range as free
+        for range in mgr.usable_range.iter() {
+            storage
+                .free_bitmap(0)
+                .set_range(range.start_frame_number..range.end_frame_number, true);
+        }
 
         let mut buddy = Buddy {
             free_head: FrameNumber::none(),
-            storage: unsafe { &mut *storage_ptr },
+            storage,
         };
 
         buddy.setup_free_links(&mgr.usable_range);
+        log::trace!("setting up buddy - done");
         buddy
     }
 
@@ -111,6 +142,8 @@ impl Buddy {
         self.free_head = FrameNumber::from_u64(usable_range.first().unwrap().start_frame_number);
 
         let mut idx_next = FrameNumber::none().into_u64();
+
+        // chain all free frames
         for idx in usable_range
             .iter()
             .flat_map(|range| range.start_frame_number..range.end_frame_number)
@@ -133,7 +166,7 @@ impl Buddy {
             None
         } else {
             let idx = self.free_head.into_u64();
-            let mut order0_free = BitSet::new(MAX_FRAME_COUNT, &mut self.storage.order0_free);
+            let mut order0_free = self.storage.free_bitmap(0);
             assert!(order0_free.get(idx));
             order0_free.set(idx, false);
 
@@ -153,9 +186,9 @@ impl Buddy {
         assert!(order == 0, "not implemented yet");
 
         let idx = start.into_u64();
-        let mut order0_used = BitSet::new(MAX_FRAME_COUNT, &mut self.storage.order0_free);
-        assert!(order0_used.get(idx));
-        order0_used.set(idx, false);
+        let mut order0_free = self.storage.free_bitmap(0);
+        assert!(!order0_free.get(idx));
+        order0_free.set(idx, true);
 
         let next_idx_ptr: *mut u64 = PHYS_ADDR_TRANSLATOR
             .get()

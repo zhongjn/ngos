@@ -1,11 +1,20 @@
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::Page;
 use x86_64::VirtAddr;
+use core::ops::Range;
 
 const KERNEL_VIRTUAL_START: u64 = 259 << 39;
 const KERNEL_VIRTUAL_LENGTH: u64 = 1 << 39;
 const USER_VIRTUAL_START: u64 = 256 << 39;
 const USER_VIRTUAL_LENGTH: u64 = 1 << 39;
+
+pub const fn kernel_virtual_range() -> Range<u64> {
+    KERNEL_VIRTUAL_START..KERNEL_VIRTUAL_START + KERNEL_VIRTUAL_LENGTH
+}
+
+pub const fn user_virtual_range() -> Range<u64> {
+    USER_VIRTUAL_START..USER_VIRTUAL_START + USER_VIRTUAL_LENGTH
+}
 
 pub struct AddrSpaceManager {
     kernel_alloc: u64

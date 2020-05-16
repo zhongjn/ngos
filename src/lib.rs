@@ -16,10 +16,12 @@ pub mod util;
 pub mod serial;
 #[allow(dead_code)]
 pub mod kernel;
+pub mod logger;
 
 use core::panic::PanicInfo;
 #[cfg(test)]
 use bootloader::BootInfo;
+use util::mutex_int::MutexIntExt;
 
 pub fn test_runner(tests: &[&dyn Fn()]) {
     serial_println!("running {} tests...", tests.len());
@@ -36,12 +38,12 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     println!("KERNEL PANIC! {}", info);
     serial_println!("KERNEL PANIC! {}", info);
     {
-        let mut writer = vga::TEXT_WRITER.lock();
+        let mut writer = vga::TEXT_WRITER.lock_uninterruptible();
         CallStackInfo::print_all(&mut *writer);
         writer.flush();
     }
     {
-        let mut writer = serial::SERIAL1.lock();
+        let mut writer = serial::SERIAL1.lock_uninterruptible();
         CallStackInfo::print_all(&mut *writer);
     }
 
@@ -69,7 +71,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 #[no_mangle]
 pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
     kernel::init(boot_info);
-    vga::init();
+    vga::init_non_core();
 
     test_main();
     loop {}

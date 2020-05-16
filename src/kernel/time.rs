@@ -27,7 +27,7 @@ pub fn get_real_time() -> u64 {
 
 pub fn subscribe_timer(interval: u64, event_handler: fn()) {
     TIMER_EVENT_HANDLERS
-        .lock()
+        .lock_interruptible()
         .push(TimerSubscription {
             interval,
             event_handler,
@@ -38,7 +38,7 @@ pub fn subscribe_timer(interval: u64, event_handler: fn()) {
 
 pub fn timer_event_handler() {
     let rt = get_real_time();
-    for sub in TIMER_EVENT_HANDLERS.lock_int().iter_mut() {
+    for sub in TIMER_EVENT_HANDLERS.lock_uninterruptible().iter_mut() {
         if rt - sub.last_trigger_time >= sub.interval {
             let handler = sub.event_handler;
             handler();
