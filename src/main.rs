@@ -9,7 +9,6 @@ extern crate ngos;
 
 use bootloader::BootInfo;
 use core::panic::PanicInfo;
-use ngos::util::mutex_int::MutexIntExt;
 
 
 #[cfg(test)]
@@ -25,12 +24,12 @@ fn panic(info: &PanicInfo) -> ! {
     println!("KERNEL PANIC! {}", info);
     serial_println!("KERNEL PANIC! {}", info);
     {
-        let mut writer = ngos::vga::TEXT_WRITER.lock_uninterruptible();
+        let mut writer = ngos::vga::TEXT_WRITER.lock();
         CallStackInfo::print_all(&mut *writer);
         writer.flush();
     }
     {
-        let mut writer = ngos::serial::SERIAL1.lock_uninterruptible();
+        let mut writer = ngos::serial::SERIAL1.lock();
         CallStackInfo::print_all(&mut *writer);
     }
 
@@ -49,6 +48,6 @@ pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
 
     ngos::kernel::start();
 
-    print!("terminated");
-    loop {}
+    // print!("terminated");
+    // loop {}
 }

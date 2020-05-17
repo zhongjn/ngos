@@ -1,8 +1,7 @@
 use crate::util::init_cell::InitCell;
-use crate::util::mutex_int::MutexIntExt;
+use crate::util::mutex_int::MutexInt;
 use heapless::consts::U64;
 use heapless::Vec;
-use spin::Mutex;
 
 static mut REAL_TIME: u64 = 0;
 
@@ -13,7 +12,7 @@ struct TimerSubscription {
     event_handler: fn(),
 }
 
-static TIMER_EVENT_HANDLERS: InitCell<Mutex<Vec<TimerSubscription, U64>>> = InitCell::new();
+static TIMER_EVENT_HANDLERS: InitCell<MutexInt<Vec<TimerSubscription, U64>>> = InitCell::new();
 
 pub fn get_real_time() -> u64 {
     unsafe {
@@ -27,7 +26,7 @@ pub fn get_real_time() -> u64 {
 
 pub fn subscribe_timer(interval: u64, event_handler: fn()) {
     TIMER_EVENT_HANDLERS
-        .lock_interruptible()
+        .lock()
         .push(TimerSubscription {
             interval,
             event_handler,
@@ -38,7 +37,7 @@ pub fn subscribe_timer(interval: u64, event_handler: fn()) {
 
 pub fn timer_event_handler() {
     let rt = get_real_time();
-    for sub in TIMER_EVENT_HANDLERS.lock_uninterruptible().iter_mut() {
+    for sub in TIMER_EVENT_HANDLERS.lock().iter_mut() {
         if rt - sub.last_trigger_time >= sub.interval {
             let handler = sub.event_handler;
             handler();
@@ -48,5 +47,5 @@ pub fn timer_event_handler() {
 }
 
 pub fn init() {
-    TIMER_EVENT_HANDLERS.init(Mutex::default());
+    TIMER_EVENT_HANDLERS.init(MutexInt::new(true, Default::default()));
 }

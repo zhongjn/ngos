@@ -1,5 +1,5 @@
 use super::{ADDR_SPACE_MANAGER, PHYS_ADDR_TRANSLATOR};
-use crate::util::{bit_set::BitSet, mutex_int::MutexIntExt};
+use crate::util::bit_set::BitSet;
 use bootloader::bootinfo::{FrameRange, MemoryMap, MemoryRegionType};
 use core::intrinsics::size_of;
 use heapless::consts::U16;
@@ -24,7 +24,7 @@ impl FrameNumber {
     }
 
     pub fn is_none(self) -> bool {
-        self.0 != 0
+        self.0 == 0
     }
 
     pub fn from_u64(idx: u64) -> Self {
@@ -71,16 +71,6 @@ impl BuddyStorage {
     }
 }
 
-// impl DefaultInPlace for BuddyStorage {
-//     unsafe fn default_in_place(s: *mut Self) {
-//         let size = BuddyStorage::size()
-//         let arr = &mut (*s).order0_free;
-//         for byte in arr.iter_mut() {
-//             *byte = !0;
-//         }
-//     }
-// }
-
 struct Buddy {
     free_head: FrameNumber,
     storage: &'static mut BuddyStorage,
@@ -93,7 +83,7 @@ impl Buddy {
         let storage_size = BuddyStorage::size(frames);
 
         let pages = num::integer::div_ceil(storage_size, FRAME_SIZE);
-        let page_range = ADDR_SPACE_MANAGER.get().lock_uninterruptible().kernel_alloc(pages);
+        let page_range = ADDR_SPACE_MANAGER.get().lock().kernel_alloc(pages);
         log::trace!("buddy storage took {} pages", pages);
 
         for i in 0..pages {
@@ -161,7 +151,6 @@ impl Buddy {
 
     fn alloc(&mut self, order: u8) -> Option<FrameNumber> {
         assert!(order == 0, "not implemented yet");
-
         if self.free_head.is_none() {
             None
         } else {
@@ -238,33 +227,36 @@ impl FrameManager {
         mgr
     }
 
-    // fn frame_in_usable_range(&self, frame: PhysFrame) -> bool {
-    //     let idx = FrameNumber::from_frame(frame).as_u64();
-    //     for range in self.usable_range.iter() {
-    //         if (range.start_frame_number..range.end_frame_number).contains(&idx) { return true; };
-    //     }
-    //     false
-    // }
-
     pub fn alloc(&mut self, order: u8) -> Option<FrameNumber> {
-        if let Some(buddy) = &mut self.buddy {
+        let result = if let Some(buddy) = &mut self.buddy {
             buddy.alloc(order)
         } else {
             assert!(order == 0, "only support order 0 alloc before buddy setup");
-            while let Some(range) = self.usable_range.last_mut() {
-                if range.count() > 0 {
-                    range.end_frame_number -= 1;
-                    return Some(FrameNumber::from_u64(range.end_frame_number));
-                }
-                if range.count() == 0 {
-                    self.usable_range.pop();
+            loop {
+                if let Some(range) = self.usable_range.last_mut() {
+                    if range.count() > 0 {
+                        range.end_frame_number -= 1;
+                        break Some(FrameNumber::from_u64(range.end_frame_number));
+                    }
+                    if range.count() == 0 {
+                        self.usable_range.pop();
+                    }
+                } else {
+                    break None;
                 }
             }
-            None
+        };
+
+        if let Some(num) = result {
+            log::trace!("alloc frame {:?}", num.into_frame());
+        } else {
+            log::trace!("alloc frame FAILED");
         }
+        result
     }
 
     pub fn dealloc(&mut self, _order: u8, start_frame: FrameNumber) {
+        log::trace!("dealloc frame {:?}", start_frame.into_frame());
         if let Some(buddy) = &mut self.buddy {
             buddy.dealloc(0, start_frame);
         } else {

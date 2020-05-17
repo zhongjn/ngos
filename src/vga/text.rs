@@ -2,12 +2,12 @@ const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
 const VGA_ADDR: *mut u8 = 0xb8000 as *mut u8;
 
-use lazy_static::*;
-use spin::Mutex;
+use crate::util::mutex_int::MutexInt;
 use core::fmt::{Arguments, Error, Write};
+use lazy_static::*;
 
 lazy_static! {
-    pub static ref TEXT_WRITER: Mutex<TextWriter> = Mutex::new(TextWriter::default());
+    pub static ref TEXT_WRITER: MutexInt<TextWriter> = MutexInt::new(true, TextWriter::default());
 }
 
 #[macro_export]
@@ -23,10 +23,7 @@ macro_rules! println {
 
 #[doc(hidden)]
 pub fn _print(args: Arguments) {
-    use x86_64::instructions::interrupts;
-    interrupts::without_interrupts(|| {
-        TEXT_WRITER.lock().write_fmt(args).unwrap();
-    });
+    TEXT_WRITER.lock().write_fmt(args).unwrap();
 }
 
 struct VGATextAdapter {
@@ -95,7 +92,7 @@ impl TextWriter {
 
     pub fn write_ascii(&mut self, ch: u8) {
         match ch {
-            10 => self.new_line(), // LF
+            10 => self.new_line(),     // LF
             32 => self.write_ascii(0), // space
             _ => {
                 if self.col >= BUFFER_WIDTH {
@@ -125,4 +122,3 @@ impl Write for TextWriter {
         Ok(())
     }
 }
-

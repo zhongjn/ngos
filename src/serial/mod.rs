@@ -1,12 +1,12 @@
-use spin::Mutex;
 use uart_16550::SerialPort;
 use lazy_static::*;
+use crate::util::mutex_int::MutexInt;
 
 lazy_static! {
-    pub static ref SERIAL1: Mutex<SerialPort> = {
+    pub static ref SERIAL1: MutexInt<SerialPort> = {
         let mut serial_port = unsafe { SerialPort::new(0x3F8) };
         serial_port.init();
-        Mutex::new(serial_port)
+        MutexInt::new(true, serial_port)
     };
 }
 

@@ -5,8 +5,11 @@
 #![feature(abi_x86_interrupt)]
 #![feature(core_intrinsics)]
 #![feature(llvm_asm)]
+#![feature(alloc_error_handler)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
+
+extern crate alloc;
 
 #[macro_use]
 pub mod vga;
@@ -21,7 +24,6 @@ pub mod logger;
 use core::panic::PanicInfo;
 #[cfg(test)]
 use bootloader::BootInfo;
-use util::mutex_int::MutexIntExt;
 
 pub fn test_runner(tests: &[&dyn Fn()]) {
     serial_println!("running {} tests...", tests.len());
@@ -38,12 +40,12 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     println!("KERNEL PANIC! {}", info);
     serial_println!("KERNEL PANIC! {}", info);
     {
-        let mut writer = vga::TEXT_WRITER.lock_uninterruptible();
+        let mut writer = vga::TEXT_WRITER.lock();
         CallStackInfo::print_all(&mut *writer);
         writer.flush();
     }
     {
-        let mut writer = serial::SERIAL1.lock_uninterruptible();
+        let mut writer = serial::SERIAL1.lock();
         CallStackInfo::print_all(&mut *writer);
     }
 
@@ -77,15 +79,13 @@ pub extern "C" fn _start(boot_info: &'static BootInfo) -> ! {
     loop {}
 }
 
-
 #[cfg(test)]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     test_panic_handler(info)
 }
 
-// #[test_case]
-// fn trivial_assertion() {
-//     serial_println!("trivial assertion... ");
-//     assert_eq!(1, 1);
-// }
+#[alloc_error_handler]
+fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
+    panic!("allocation error: {:?}", layout)
+}

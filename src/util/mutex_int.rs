@@ -8,26 +8,26 @@ pub struct MutexGuardInt<'a, T> {
 }
 
 pub struct MutexInt<T> {
-    interruptible: bool,
+    allow_interrupt_context: bool,
     inner: Mutex<T>,
 }
 
 impl<T> MutexInt<T> {
-    pub const fn new(interruptible: bool, data: T) -> Self {
+    pub const fn new(allow_interrupt_context: bool, data: T) -> Self {
         Self {
-            interruptible,
+            allow_interrupt_context,
             inner: Mutex::new(data),
         }
     }
 
-    pub fn lock(&self) -> MutexGuard<T> {
-        if self.interruptible {
+    pub fn lock(&self) -> MutexGuardInt<T> {
+        if !self.allow_interrupt_context {
             assert!(
                 !crate::kernel::is_interrupt_context(),
-                "cannot obtain interruptible lock in interrupt context"
+                "does not allow interrupt context"
             );
             MutexGuardInt {
-                guard: self.lock(),
+                guard: self.inner.lock(),
                 enable_interrupt_later: false,
             }
         } else {
@@ -36,41 +36,12 @@ impl<T> MutexInt<T> {
                 x86_64::instructions::interrupts::disable();
             }
             MutexGuardInt {
-                guard: self.lock(),
+                guard: self.inner.lock(),
                 enable_interrupt_later: int_en,
             }
         }
     }
 }
-
-// pub trait MutexIntExt<T> {
-//     fn lock_uninterruptible(&self) -> MutexGuardInt<T>;
-//     fn lock_interruptible(&self) -> MutexGuard<T>;
-// }
-
-// impl<T> MutexIntExt<T> for Mutex<T> {
-//     fn lock_interruptible(&self) -> MutexGuard<T> {
-//         assert!(
-//             !crate::kernel::is_interrupt_context(),
-//             "cannot obtain interruptible lock in interrupt context"
-//         );
-//         MutexGuardInt {
-//             guard: self.lock(),
-//             enable_interrupt_later: false,
-//         }
-//     }
-
-//     fn lock_uninterruptible(&self) -> MutexGuardInt<T> {
-//         let int_en = x86_64::instructions::interrupts::are_enabled();
-//         if int_en {
-//             x86_64::instructions::interrupts::disable();
-//         }
-//         MutexGuardInt {
-//             guard: self.lock(),
-//             enable_interrupt_later: int_en,
-//         }
-//     }
-// }
 
 impl<T> Drop for MutexGuardInt<'_, T> {
     fn drop(&mut self) {
