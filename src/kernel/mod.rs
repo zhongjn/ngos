@@ -3,6 +3,7 @@ mod gdt;
 mod time;
 mod memory;
 mod misc;
+mod sched;
 
 // use time::get_real_time;
 use bootloader::BootInfo;
